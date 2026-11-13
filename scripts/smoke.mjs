@@ -1,65 +1,9 @@
-import { spawn } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { readFile, stat } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { promisify } from 'node:util';
 
-const distIndexPath = resolve('dist-renderer/index.html');
-const cargoManifestPath = resolve('src-tauri/Cargo.toml');
-
-function runProcess(command, args, { env = process.env, timeoutMs = 300_000 } = {}) {
-  return new Promise((resolvePromise, rejectPromise) => {
-    const child = spawn(command, args, {
-      cwd: process.cwd(),
-      env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-    });
-
-    let stdout = '';
-    let stderr = '';
-    let timedOut = false;
-
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (chunk) => {
-      stdout += chunk;
-    });
-    child.stderr.on('data', (chunk) => {
-      stderr += chunk;
-    });
-
-    const timeout = setTimeout(() => {
-      timedOut = true;
-      child.kill();
-    }, timeoutMs);
-
-    child.on('error', (error) => {
-      clearTimeout(timeout);
-      rejectPromise(new Error(`Failed to start "${command}": ${error.message}`));
-    });
-
-    child.on('close', (code) => {
-      clearTimeout(timeout);
-      if (timedOut) {
-        rejectPromise(
-          new Error(
-            `Command "${command} ${args.join(' ')}" timed out after ${timeoutMs}ms.\n${stderr.trim()}`,
-          ),
-        );
-        return;
-      }
-      if (code !== 0) {
-        const details = [stdout.trim(), stderr.trim()].filter(Boolean).join('\n');
-        rejectPromise(
-          new Error(
-            `Command "${command} ${args.join(' ')}" exited with code ${code}.${details ? `\n${details}` : ''}`,
-          ),
-        );
-        return;
-      }
-      resolvePromise({ stdout, stderr });
-    });
-  });
-}
+const execFileAsync = promisify(execFile);
+const distIndexPath = 'dist-renderer/index.html';
 
 async function hasNonEmptyFile(filePath) {
   try {
@@ -76,11 +20,8 @@ async function hasNonEmptyFile(filePath) {
 
 async function ensureWebBuild() {
   if (!(await hasNonEmptyFile(distIndexPath))) {
-    const [npmCmd, npmArgs] =
-      process.platform === 'win32'
-        ? ['cmd.exe', ['/d', '/c', 'npm.cmd', 'run', 'build:web']]
-        : ['npm', ['run', 'build:web']];
-    await runProcess(npmCmd, npmArgs);
+    const { build } = await import('vite');
+    await build();
   }
 
   if (!(await hasNonEmptyFile(distIndexPath))) {
@@ -89,11 +30,14 @@ async function ensureWebBuild() {
 }
 
 async function runRustSmokeTests() {
-  await runProcess('cargo', ['test', '--manifest-path', cargoManifestPath, '--quiet'], {
+  await execFileAsync('cargo', ['test', '--manifest-path', 'src-tauri/Cargo.toml', '--quiet'], {
     env: {
       ...process.env,
       AUTHAPP_SMOKE_TEST: '1',
     },
+    windowsHide: true,
+    timeout: 300_000,
+    maxBuffer: 10 * 1024 * 1024,
   });
 }
 

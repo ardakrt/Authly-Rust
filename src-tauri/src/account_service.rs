@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use uuid::Uuid;
+use zeroize::Zeroize;
 
 use crate::database::{now_millis, AccountRepository, GroupRepository};
 use crate::models::{
@@ -70,6 +71,10 @@ impl AccountService {
         }
     }
 
+    pub fn clear_vault_cache(&self) {
+        self.vault.clear_cache();
+    }
+
     pub fn list(&self) -> Result<Vec<AccountDto>, String> {
         Ok(self
             .repository
@@ -92,7 +97,7 @@ impl AccountService {
 
     pub fn get_totp_code(&self, id: &str) -> Result<TotpCode, String> {
         let account_id = validate_uuid_str(id)?;
-        let (secret, account) = self.get_totp_secret(&account_id)?;
+        let (mut secret, account) = self.get_totp_secret(&account_id)?;
         let timestamp_ms = now_millis().max(0) as u64;
         let value = self.totp_service.generate(
             &secret,
@@ -100,7 +105,9 @@ impl AccountService {
             account.digits,
             account.period,
             timestamp_ms,
-        )?;
+        );
+        secret.zeroize();
+        let value = value?;
         Ok(TotpCode {
             account_id,
             code: value.code,
@@ -136,8 +143,10 @@ impl AccountService {
             input.period,
             input.group_id.as_deref(),
         )?;
-        let normalized_secret = normalize_base32_secret(&input.secret)?;
-        let encrypted_secret = self.vault.encrypt_secret(&normalized_secret)?;
+        let mut normalized_secret = normalize_base32_secret(&input.secret)?;
+        let encrypted_secret_res = self.vault.encrypt_secret(&normalized_secret);
+        normalized_secret.zeroize();
+        let encrypted_secret = encrypted_secret_res?;
         let now = now_millis();
         let sort_order = self.repository.list()?.len() as i64;
         let record = AccountRecord {
@@ -184,8 +193,10 @@ impl AccountService {
                 item.period,
                 item.group_id.as_deref(),
             )?;
-            let normalized_secret = normalize_base32_secret(&item.secret)?;
-            let encrypted_secret = self.vault.encrypt_secret(&normalized_secret)?;
+            let mut normalized_secret = normalize_base32_secret(&item.secret)?;
+            let encrypted_secret_res = self.vault.encrypt_secret(&normalized_secret);
+            normalized_secret.zeroize();
+            let encrypted_secret = encrypted_secret_res?;
             records.push(AccountRecord {
                 id: Uuid::new_v4().to_string(),
                 issuer,
@@ -294,11 +305,12 @@ impl AccountService {
                 account.period,
                 account.group_id.as_deref(),
             )?;
-            let normalized_secret = normalize_base32_secret(&account.secret)?;
+            let mut normalized_secret = normalize_base32_secret(&account.secret)?;
 
             if let Some(ref gid) = group_id {
                 let mapped = group_map.get(gid).cloned();
                 if payload.version == 2 && mapped.is_none() {
+                    normalized_secret.zeroize();
                     return Err("Yedekte eksik grup bilgisi var.".to_string());
                 }
                 if payload.version == 1
@@ -311,7 +323,9 @@ impl AccountService {
                 }
             }
 
-            let encrypted_secret = self.vault.encrypt_secret(&normalized_secret)?;
+            let encrypted_secret_res = self.vault.encrypt_secret(&normalized_secret);
+            normalized_secret.zeroize();
+            let encrypted_secret = encrypted_secret_res?;
             assert_can_write()?;
 
             records.push(AccountRecord {
@@ -359,8 +373,10 @@ impl AccountService {
 
         let encrypted_secret = match input.secret {
             Some(ref raw_secret) => {
-                let normalized = normalize_base32_secret(raw_secret)?;
-                self.vault.encrypt_secret(&normalized)?
+                let mut normalized = normalize_base32_secret(raw_secret)?;
+                let encrypted_res = self.vault.encrypt_secret(&normalized);
+                normalized.zeroize();
+                encrypted_res?
             }
             None => current.encrypted_secret,
         };

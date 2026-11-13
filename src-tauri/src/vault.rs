@@ -27,6 +27,7 @@ pub struct VaultDecryptResult {
 pub trait VaultService: Send + Sync {
     fn encrypt_secret(&self, secret: &str) -> Result<Vec<u8>, String>;
     fn decrypt_secret(&self, encrypted_secret: &[u8]) -> Result<VaultDecryptResult, String>;
+    fn clear_cache(&self) {}
 }
 
 pub struct KeyringAesGcmVault {
@@ -139,6 +140,15 @@ impl VaultService for KeyringAesGcmVault {
             secret,
             re_encrypted: None,
         })
+    }
+
+    fn clear_cache(&self) {
+        if let Ok(mut guard) = self.cached_key.lock() {
+            if let Some(ref mut key) = *guard {
+                key.zeroize();
+            }
+            *guard = None;
+        }
     }
 }
 
@@ -784,5 +794,19 @@ mod tests {
         assert!(vault.decrypt_secret(&corrupted.encrypted_secret).is_err());
 
         let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn clear_cache_zeroizes_and_clears_cached_master_key() {
+        let vault = KeyringAesGcmVault::new();
+        {
+            let mut guard = vault.cached_key.lock().unwrap();
+            *guard = Some([0xAB; KEY_LEN]);
+        }
+        assert!(vault.cached_key.lock().unwrap().is_some());
+
+        vault.clear_cache();
+
+        assert!(vault.cached_key.lock().unwrap().is_none());
     }
 }

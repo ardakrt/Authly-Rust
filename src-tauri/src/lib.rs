@@ -277,6 +277,7 @@ fn get_lock_status(
         guard.get_status()?
     };
     if changed {
+        state.account_service.clear_vault_cache();
         emit_lock_status(&app, &status);
     }
     Ok(status)
@@ -354,6 +355,7 @@ fn lock_app(
         }
     };
     if let Some(status) = maybe_status {
+        state.account_service.clear_vault_cache();
         emit_lock_status(&app, &status);
     }
     Ok(())
@@ -377,6 +379,7 @@ fn record_activity(
         if let Ok(guard) = state.lock_service.lock() {
             if let Ok(status) = guard.snapshot() {
                 if status.is_locked {
+                    state.account_service.clear_vault_cache();
                     emit_lock_status(&app, &status);
                 }
             }
@@ -680,6 +683,7 @@ pub fn run() {
             let suppress_initial_show = start_minimized || is_smoke;
             let window_ready = Arc::new(AtomicBool::new(suppress_initial_show));
 
+            let timer_accounts = account_service.clone();
             app.manage(AppState {
                 account_service,
                 totp_service,
@@ -745,6 +749,7 @@ pub fn run() {
                     }
                 };
                 if let Some(status) = maybe_status {
+                    timer_accounts.clear_vault_cache();
                     emit_lock_status(&app_handle, &status);
                 }
             });

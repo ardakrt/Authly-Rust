@@ -102,15 +102,18 @@ impl BackupService {
         }
 
         let exported_count = export_items.len();
-        let payload = BackupPayload {
+        let mut payload = BackupPayload {
             version: 2,
             groups: Some(groups),
             exported_at: now_millis(),
             accounts: export_items,
         };
 
-        let payload_json = serde_json::to_string(&payload)
+        let mut payload_json = serde_json::to_string(&payload)
             .map_err(|_| "Yedek verisi serileştirilemedi.".to_string())?;
+        for item in &mut payload.accounts {
+            item.secret.zeroize();
+        }
 
         let mut salt = [0u8; 16];
         let mut iv = [0u8; 12];
@@ -128,9 +131,11 @@ impl BackupService {
         let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key));
         key.zeroize();
 
-        let ct_and_tag = cipher
+        let ct_res = cipher
             .encrypt(Nonce::from_slice(&iv), payload_json.as_bytes())
-            .map_err(|_| "Yedek şifrelenemedi.".to_string())?;
+            .map_err(|_| "Yedek şifrelenemedi.".to_string());
+        payload_json.zeroize();
+        let ct_and_tag = ct_res?;
 
         if ct_and_tag.len() < GCM_TAG_LEN {
             return Err("Yedek şifreleme çıktısı geçersiz.".to_string());
@@ -215,6 +220,9 @@ impl BackupService {
 
         let metadata =
             fs::metadata(path).map_err(|_| "Yedek dosyası okunamadı.".to_string())?;
+        if !metadata.is_file() {
+            return Err("Geçerli bir yedek dosyası seçin.".to_string());
+        }
         if metadata.len() as usize > MAX_BACKUP_FILE_BYTES {
             return Err("Yedek dosyası izin verilen boyut sınırını aşıyor.".to_string());
         }
@@ -273,11 +281,13 @@ impl BackupService {
             .decrypt(Nonce::from_slice(&iv), combined.as_slice())
             .map_err(|_| "Parola hatalı veya yedek dosyası bozuk.".to_string())?;
 
-        let decrypted_text = String::from_utf8(decrypted)
+        let mut decrypted_text = String::from_utf8(decrypted)
             .map_err(|_| "Yedek verisi çözülemedi veya bozulmuş.".to_string())?;
 
-        let payload: BackupPayload = serde_json::from_str(&decrypted_text)
-            .map_err(|_| "Yedek verisi çözülemedi veya bozulmuş.".to_string())?;
+        let payload_res = serde_json::from_str::<BackupPayload>(&decrypted_text)
+            .map_err(|_| "Yedek verisi çözülemedi veya bozulmuş.".to_string());
+        decrypted_text.zeroize();
+        let payload = payload_res?;
 
         let (imported_count, ungrouped_count) =
             self.account_service.restore_backup(payload, assert_access)?;

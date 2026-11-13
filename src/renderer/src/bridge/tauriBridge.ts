@@ -36,6 +36,7 @@ import {
   appSettingsSchema,
   getSettingsRequestSchema,
   updateSettingsRequestSchema,
+  type AppSettings,
   type UpdateSettingsRequest,
 } from '@shared/schemas/settings';
 import {
@@ -56,13 +57,6 @@ import type { AuthappApi } from '@shared/types/electron-api';
 
 const PREVIEW_VERSION = '0.3.12';
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-const PREVIEW_STORAGE_KEYS = {
-  accounts: 'authapp.preview.accounts',
-  settings: 'authapp.preview.settings',
-  pin: 'authapp.preview.pin',
-  locked: 'authapp.preview.locked',
-  autoLockTimeout: 'authapp.preview.autoLockTimeout',
-} as const;
 
 type TotpAlgorithm = 'SHA1' | 'SHA256' | 'SHA512';
 
@@ -81,7 +75,30 @@ interface StoredPreviewAccount {
   updatedAt: number;
 }
 
+interface PreviewState {
+  accounts: StoredPreviewAccount[];
+  settings: AppSettings;
+  pinCode: string | null;
+  locked: boolean;
+  autoLockTimeout: number;
+}
+
 const previewListeners = new Map<string, Set<(payload: unknown) => void>>();
+
+function createInitialPreviewState(): PreviewState {
+  return {
+    accounts: [],
+    settings: {
+      theme: 'system',
+      language: 'tr',
+      closeToTray: true,
+      startMinimized: false,
+    },
+    pinCode: null,
+    locked: false,
+    autoLockTimeout: 5,
+  };
+}
 
 function isPreviewMode(): boolean {
   return typeof window !== 'undefined' && !('__TAURI_INTERNALS__' in window);
@@ -93,25 +110,6 @@ function emitPreviewEvent(eventName: string, payload: unknown): void {
   for (const listener of listeners) {
     listener(payload);
   }
-}
-
-function readPreviewJson<T>(key: string, fallback: T): T {
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-
-function writePreviewJson(key: string, value: unknown): void {
-  window.localStorage.setItem(key, JSON.stringify(value));
-}
-
-function readPreviewAccounts(): StoredPreviewAccount[] {
-  const parsed = readPreviewJson<unknown>(PREVIEW_STORAGE_KEYS.accounts, []);
-  return Array.isArray(parsed) ? (parsed as StoredPreviewAccount[]) : [];
 }
 
 function toAccountDto(account: StoredPreviewAccount) {
@@ -144,31 +142,16 @@ function createPreviewUuid(): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-function readPreviewLockStatus() {
-  const pin = window.localStorage.getItem(PREVIEW_STORAGE_KEYS.pin);
-  const isPinSet = Boolean(pin);
-  const isLocked = isPinSet && window.localStorage.getItem(PREVIEW_STORAGE_KEYS.locked) === 'true';
-  const rawValue = window.localStorage.getItem(PREVIEW_STORAGE_KEYS.autoLockTimeout);
-  const rawTimeout = rawValue === null ? Number.NaN : Number(rawValue);
-  const autoLockTimeout = Number.isInteger(rawTimeout) && rawTimeout >= 0 ? rawTimeout : 5;
-  return { isPinSet, isLocked, autoLockTimeout };
+function readPreviewLockStatus(state: PreviewState) {
+  const isPinSet = Boolean(state.pinCode);
+  const isLocked = isPinSet && state.locked;
+  return { isPinSet, isLocked, autoLockTimeout: state.autoLockTimeout };
 }
 
-function assertPreviewUnlocked(): void {
-  if (readPreviewLockStatus().isLocked) {
+function assertPreviewUnlocked(state: PreviewState): void {
+  if (readPreviewLockStatus(state).isLocked) {
     throw new Error('Uygulama kilitli.');
   }
-}
-
-function readPreviewSettings() {
-  const defaults = {
-    theme: 'system' as const,
-    language: 'tr' as const,
-    closeToTray: true,
-    startMinimized: false,
-  };
-  const stored = readPreviewJson<Record<string, unknown>>(PREVIEW_STORAGE_KEYS.settings, {});
-  return appSettingsSchema.parse({ ...defaults, ...stored });
 }
 
 function decodeBase32(secret: string): Uint8Array<ArrayBuffer> {
@@ -275,7 +258,11 @@ function parsePreviewOtpAuthUri(uri: string) {
   });
 }
 
-async function invokeBrowserPreview<T>(command: string, args: Record<string, unknown>): Promise<T> {
+async function invokeBrowserPreview<T>(
+  state: PreviewState,
+  command: string,
+  args: Record<string, unknown>,
+): Promise<T> {
   const request = (args['request'] ?? {}) as Record<string, unknown>;
 
   switch (command) {
@@ -288,56 +275,53 @@ async function invokeBrowserPreview<T>(command: string, args: Record<string, unk
       } as T;
 
     case 'get_settings':
-      return readPreviewSettings() as T;
+      return { ...state.settings } as T;
 
     case 'update_settings': {
-      const next = appSettingsSchema.parse({ ...readPreviewSettings(), ...request });
-      writePreviewJson(PREVIEW_STORAGE_KEYS.settings, next);
-      return next as T;
+      const next = appSettingsSchema.parse({ ...state.settings, ...request });
+      state.settings = next;
+      return { ...next } as T;
     }
 
     case 'get_lock_status':
-      return readPreviewLockStatus() as T;
+      return readPreviewLockStatus(state) as T;
 
     case 'set_pin': {
-      const existingPin = window.localStorage.getItem(PREVIEW_STORAGE_KEYS.pin);
       const parsed = setPinRequestSchema.parse(request);
-      if (existingPin && parsed.currentPin !== existingPin) {
+      if (state.pinCode && parsed.currentPin !== state.pinCode) {
         throw new Error('Mevcut PIN hatalı.');
       }
-      window.localStorage.setItem(PREVIEW_STORAGE_KEYS.pin, parsed.pin);
-      window.localStorage.setItem(PREVIEW_STORAGE_KEYS.locked, 'false');
-      emitPreviewEvent(LOCK_STATUS_EVENT, readPreviewLockStatus());
+      state.pinCode = parsed.pin;
+      state.locked = false;
+      emitPreviewEvent(LOCK_STATUS_EVENT, readPreviewLockStatus(state));
       return undefined as T;
     }
 
     case 'verify_pin': {
-      const existingPin = window.localStorage.getItem(PREVIEW_STORAGE_KEYS.pin);
       const parsed = verifyPinRequestSchema.parse(request);
-      if (!existingPin || parsed.pin !== existingPin) {
+      if (!state.pinCode || parsed.pin !== state.pinCode) {
         throw new Error('PIN hatalı.');
       }
-      window.localStorage.setItem(PREVIEW_STORAGE_KEYS.locked, 'false');
-      emitPreviewEvent(LOCK_STATUS_EVENT, readPreviewLockStatus());
+      state.locked = false;
+      emitPreviewEvent(LOCK_STATUS_EVENT, readPreviewLockStatus(state));
       return true as T;
     }
 
     case 'remove_pin': {
-      const existingPin = window.localStorage.getItem(PREVIEW_STORAGE_KEYS.pin);
       const parsed = removePinRequestSchema.parse(request);
-      if (existingPin && parsed.currentPin !== existingPin) {
+      if (state.pinCode && parsed.currentPin !== state.pinCode) {
         throw new Error('Mevcut PIN hatalı.');
       }
-      window.localStorage.removeItem(PREVIEW_STORAGE_KEYS.pin);
-      window.localStorage.removeItem(PREVIEW_STORAGE_KEYS.locked);
-      emitPreviewEvent(LOCK_STATUS_EVENT, readPreviewLockStatus());
+      state.pinCode = null;
+      state.locked = false;
+      emitPreviewEvent(LOCK_STATUS_EVENT, readPreviewLockStatus(state));
       return undefined as T;
     }
 
     case 'lock_app': {
-      if (window.localStorage.getItem(PREVIEW_STORAGE_KEYS.pin)) {
-        window.localStorage.setItem(PREVIEW_STORAGE_KEYS.locked, 'true');
-        emitPreviewEvent(LOCK_STATUS_EVENT, readPreviewLockStatus());
+      if (state.pinCode) {
+        state.locked = true;
+        emitPreviewEvent(LOCK_STATUS_EVENT, readPreviewLockStatus(state));
       }
       return undefined as T;
     }
@@ -346,16 +330,16 @@ async function invokeBrowserPreview<T>(command: string, args: Record<string, unk
       return undefined as T;
 
     case 'list_accounts': {
-      assertPreviewUnlocked();
-      return readPreviewAccounts().map(toAccountDto) as T;
+      assertPreviewUnlocked(state);
+      return state.accounts.map(toAccountDto) as T;
     }
 
     case 'create_account': {
-      assertPreviewUnlocked();
+      assertPreviewUnlocked(state);
       const input = createAccountRequestSchema.parse(request);
-      const accounts = readPreviewAccounts();
       const now = Math.max(1, Date.now());
-      const nextSortOrder = accounts.reduce((max, item) => Math.max(max, item.sortOrder), -1) + 1;
+      const nextSortOrder =
+        state.accounts.reduce((max, item) => Math.max(max, item.sortOrder), -1) + 1;
       const created: StoredPreviewAccount = {
         id: createPreviewUuid(),
         issuer: input.issuer,
@@ -370,17 +354,16 @@ async function invokeBrowserPreview<T>(command: string, args: Record<string, unk
         createdAt: now,
         updatedAt: now,
       };
-      accounts.push(created);
-      writePreviewJson(PREVIEW_STORAGE_KEYS.accounts, accounts);
+      state.accounts.push(created);
       return toAccountDto(created) as T;
     }
 
     case 'import_accounts': {
-      assertPreviewUnlocked();
+      assertPreviewUnlocked(state);
       const input = importAccountsRequestSchema.parse(request);
-      const accounts = readPreviewAccounts();
       const now = Math.max(1, Date.now());
-      let nextSortOrder = accounts.reduce((max, item) => Math.max(max, item.sortOrder), -1) + 1;
+      let nextSortOrder =
+        state.accounts.reduce((max, item) => Math.max(max, item.sortOrder), -1) + 1;
       const added: StoredPreviewAccount[] = input.accounts.map((item) => ({
         id: createPreviewUuid(),
         issuer: item.issuer,
@@ -395,18 +378,16 @@ async function invokeBrowserPreview<T>(command: string, args: Record<string, unk
         createdAt: now,
         updatedAt: now,
       }));
-      accounts.push(...added);
-      writePreviewJson(PREVIEW_STORAGE_KEYS.accounts, accounts);
+      state.accounts.push(...added);
       return added.map(toAccountDto) as T;
     }
 
     case 'update_account': {
-      assertPreviewUnlocked();
+      assertPreviewUnlocked(state);
       const input = updateAccountRequestSchema.parse(request);
-      const accounts = readPreviewAccounts();
-      const idx = accounts.findIndex((item) => item.id === input.id);
+      const idx = state.accounts.findIndex((item) => item.id === input.id);
       if (idx < 0) throw new Error('Hesap bulunamadı.');
-      const current = accounts[idx]!;
+      const current = state.accounts[idx]!;
       const updated: StoredPreviewAccount = {
         ...current,
         issuer: input.issuer,
@@ -419,24 +400,21 @@ async function invokeBrowserPreview<T>(command: string, args: Record<string, unk
         groupId: input.groupId,
         updatedAt: Math.max(1, Date.now()),
       };
-      accounts[idx] = updated;
-      writePreviewJson(PREVIEW_STORAGE_KEYS.accounts, accounts);
+      state.accounts[idx] = updated;
       return toAccountDto(updated) as T;
     }
 
     case 'delete_account': {
-      assertPreviewUnlocked();
+      assertPreviewUnlocked(state);
       const input = deleteAccountRequestSchema.parse(request);
-      const filtered = readPreviewAccounts().filter((item) => item.id !== input.id);
-      writePreviewJson(PREVIEW_STORAGE_KEYS.accounts, filtered);
+      state.accounts = state.accounts.filter((item) => item.id !== input.id);
       return undefined as T;
     }
 
     case 'get_totp_codes': {
-      assertPreviewUnlocked();
-      const accounts = readPreviewAccounts();
+      assertPreviewUnlocked(state);
       const codes = await Promise.all(
-        accounts.map(async (acc) => {
+        state.accounts.map(async (acc) => {
           const totp = await generatePreviewTotp(acc.secret, acc.algorithm, acc.digits, acc.period);
           return { accountId: acc.id, ...totp };
         }),
@@ -450,9 +428,9 @@ async function invokeBrowserPreview<T>(command: string, args: Record<string, unk
     }
 
     case 'copy_totp': {
-      assertPreviewUnlocked();
+      assertPreviewUnlocked(state);
       const input = copyTotpRequestSchema.parse(request);
-      const account = readPreviewAccounts().find((item) => item.id === input.accountId);
+      const account = state.accounts.find((item) => item.id === input.accountId);
       if (!account) throw new Error('Hesap bulunamadı.');
       const totp = await generatePreviewTotp(
         account.secret,
@@ -467,11 +445,11 @@ async function invokeBrowserPreview<T>(command: string, args: Record<string, unk
     }
 
     case 'export_backup':
-      assertPreviewUnlocked();
+      assertPreviewUnlocked(state);
       return { success: false, filePath: null, exportedCount: 0 } as T;
 
     case 'import_backup':
-      assertPreviewUnlocked();
+      assertPreviewUnlocked(state);
       return { success: false, importedCount: 0, skippedCount: 0, ungroupedCount: 0 } as T;
 
     case 'check_update':
@@ -495,12 +473,16 @@ async function invokeBrowserPreview<T>(command: string, args: Record<string, unk
   }
 }
 
-async function invokeTauri<T>(command: string, args: Record<string, unknown>): Promise<T> {
+async function invokeTauri<T>(
+  previewState: PreviewState,
+  command: string,
+  args: Record<string, unknown>,
+): Promise<T> {
   try {
     return await invoke<T>(command, args);
   } catch (error) {
     if (error instanceof TypeError && isPreviewMode()) {
-      return await invokeBrowserPreview<T>(command, args);
+      return await invokeBrowserPreview<T>(previewState, command, args);
     }
     if (error instanceof Error) throw error;
     throw new Error(typeof error === 'string' ? error : 'İşlem başarısız.', { cause: error });
@@ -551,106 +533,110 @@ function subscribeTauriEvent<T>(
 }
 
 export function createTauriAuthappApi(): AuthappApi {
+  const previewState = createInitialPreviewState();
+  const callBridge = <T>(command: string, args: Record<string, unknown>) =>
+    invokeTauri<T>(previewState, command, args);
+
   return Object.freeze({
     getRuntimeInfo: async () =>
       runtimeInfoSchema.parse(
-        await invokeTauri('get_runtime_info', {
+        await callBridge('get_runtime_info', {
           request: runtimeInfoRequestSchema.parse({}),
         }),
       ),
     listAccounts: async () =>
       accountDtoSchema.array().parse(
-        await invokeTauri('list_accounts', {
+        await callBridge('list_accounts', {
           request: listAccountsRequestSchema.parse({}),
         }),
       ),
     createAccount: async (request: CreateAccountRequest) =>
       accountDtoSchema.parse(
-        await invokeTauri('create_account', {
+        await callBridge('create_account', {
           request: createAccountRequestSchema.parse(request),
         }),
       ),
     importAccounts: async (request: ImportAccountsRequest) =>
       accountDtoSchema.array().parse(
-        await invokeTauri('import_accounts', {
+        await callBridge('import_accounts', {
           request: importAccountsRequestSchema.parse(request),
         }),
       ),
     updateAccount: async (request: UpdateAccountRequest) =>
       accountDtoSchema.parse(
-        await invokeTauri('update_account', {
+        await callBridge('update_account', {
           request: updateAccountRequestSchema.parse(request),
         }),
       ),
     deleteAccount: async (request: DeleteAccountRequest) => {
-      await invokeTauri('delete_account', {
+      await callBridge('delete_account', {
         request: deleteAccountRequestSchema.parse(request),
       });
     },
     getTotpCodes: async () =>
       totpCodeSchema.array().parse(
-        await invokeTauri('get_totp_codes', {
+        await callBridge('get_totp_codes', {
           request: getTotpCodesRequestSchema.parse({}),
         }),
       ),
     parseOtpAuthUri: async (uri: string) =>
       parsedOtpAuthSchema.parse(
-        await invokeTauri('parse_otp_auth_uri', {
+        await callBridge('parse_otp_auth_uri', {
           request: parseOtpAuthUriRequestSchema.parse({ uri }),
         }),
       ),
     copyTotp: async (accountId: string) => {
-      await invokeTauri('copy_totp', {
+      await callBridge('copy_totp', {
         request: copyTotpRequestSchema.parse({ accountId }),
       });
     },
     exportBackup: async (request: ExportBackupRequest) =>
       exportBackupResultSchema.parse(
-        await invokeTauri('export_backup', {
+        await callBridge('export_backup', {
           request: exportBackupRequestSchema.parse(request),
         }),
       ),
     importBackup: async (request: ImportBackupRequest) =>
       importBackupResultSchema.parse(
-        await invokeTauri('import_backup', {
+        await callBridge('import_backup', {
           request: importBackupRequestSchema.parse(request),
         }),
       ),
     getSettings: async () =>
       appSettingsSchema.parse(
-        await invokeTauri('get_settings', {
+        await callBridge('get_settings', {
           request: getSettingsRequestSchema.parse({}),
         }),
       ),
     updateSettings: async (request: UpdateSettingsRequest) =>
       appSettingsSchema.parse(
-        await invokeTauri('update_settings', {
+        await callBridge('update_settings', {
           request: updateSettingsRequestSchema.parse(request),
         }),
       ),
     getLockStatus: async () =>
-      lockStatusSchema.parse(await invokeTauri('get_lock_status', { request: {} })),
+      lockStatusSchema.parse(await callBridge('get_lock_status', { request: {} })),
     verifyPin: async (request: VerifyPinRequest) => {
-      const result = await invokeTauri<boolean>('verify_pin', {
+      const result = await callBridge<boolean>('verify_pin', {
         request: verifyPinRequestSchema.parse(request),
       });
       return Boolean(result);
     },
     setPin: async (request: SetPinRequest) => {
-      await invokeTauri('set_pin', {
+      await callBridge('set_pin', {
         request: setPinRequestSchema.parse(request),
       });
     },
     removePin: async (request: RemovePinRequest) => {
-      await invokeTauri('remove_pin', {
+      await callBridge('remove_pin', {
         request: removePinRequestSchema.parse(request),
       });
     },
     lockApp: async () => {
-      await invokeTauri('lock_app', { request: {} });
+      await callBridge('lock_app', { request: {} });
     },
     recordActivity: async () => {
-      await invokeTauri('record_activity', {
+      await callBridge('record_activity', {
         request: lockActivityRequestSchema.parse({}),
       });
     },
@@ -662,18 +648,18 @@ export function createTauriAuthappApi(): AuthappApi {
       ),
     checkUpdate: async () =>
       updateInfoSchema.parse(
-        await invokeTauri('check_update', {
+        await callBridge('check_update', {
           request: checkUpdateRequestSchema.parse({}),
         }),
       ),
     getUpdateState: async () =>
       updateStateSchema.parse(
-        await invokeTauri('get_update_state', {
+        await callBridge('get_update_state', {
           request: getUpdateStateRequestSchema.parse({}),
         }),
       ),
     installUpdate: async () => {
-      await invokeTauri('install_update', {
+      await callBridge('install_update', {
         request: installUpdateRequestSchema.parse({}),
       });
     },

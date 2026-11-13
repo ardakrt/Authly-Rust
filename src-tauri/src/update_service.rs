@@ -103,6 +103,8 @@ impl UpdateService {
 pub async fn fetch_latest_github_release(current_version: &str) -> Result<UpdateInfo, String> {
     let client = reqwest::Client::builder()
         .user_agent(format!("Authly/{current_version}"))
+        .timeout(std::time::Duration::from_secs(10))
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| format!("HTTP istemcisi başlatılamadı: {e}"))?;
 

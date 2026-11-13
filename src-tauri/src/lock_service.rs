@@ -3,6 +3,7 @@ use rand::rngs::OsRng;
 use rand::RngCore;
 use sha2::Sha256;
 use subtle::ConstantTimeEq;
+use zeroize::Zeroize;
 
 use crate::database::{now_millis, SettingsRepository};
 use crate::models::LockStatus;
@@ -178,15 +179,18 @@ impl LockService {
             .filter(|&v| v > 0)
             .unwrap_or(LEGACY_PIN_ITERATIONS);
 
-        let salt = hex::decode(&pin_salt).map_err(|_| "PIN tuzu bozuk.".to_string())?;
-        let expected_hash =
+        let mut salt = hex::decode(&pin_salt).map_err(|_| "PIN tuzu bozuk.".to_string())?;
+        let mut expected_hash =
             hex::decode(&pin_hash).map_err(|_| "PIN özeti bozuk.".to_string())?;
 
         let mut derived_hash = [0u8; 32];
         pbkdf2_hmac::<Sha256>(pin.as_bytes(), &salt, iterations, &mut derived_hash);
+        salt.zeroize();
 
         let matches = derived_hash.len() == expected_hash.len()
             && bool::from(derived_hash.ct_eq(&expected_hash));
+        derived_hash.zeroize();
+        expected_hash.zeroize();
 
         if !matches {
             let failed_attempts = self
@@ -270,11 +274,16 @@ impl LockService {
         OsRng.fill_bytes(&mut salt);
         let mut hash = [0u8; 32];
         pbkdf2_hmac::<Sha256>(pin.as_bytes(), &salt, CURRENT_PIN_ITERATIONS, &mut hash);
-        self.repository.set("pinSalt", &hex::encode(salt))?;
-        self.repository.set("pinHash", &hex::encode(hash))?;
-        self.repository
-            .set("pinIterations", &CURRENT_PIN_ITERATIONS.to_string())?;
-        Ok(())
+        let res = (|| {
+            self.repository.set("pinSalt", &hex::encode(salt))?;
+            self.repository.set("pinHash", &hex::encode(hash))?;
+            self.repository
+                .set("pinIterations", &CURRENT_PIN_ITERATIONS.to_string())?;
+            Ok(())
+        })();
+        salt.zeroize();
+        hash.zeroize();
+        res
     }
 
     fn clear_failed_attempts(&self) -> Result<(), String> {

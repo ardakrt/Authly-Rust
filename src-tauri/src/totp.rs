@@ -3,6 +3,7 @@ use hmac::{Hmac, Mac};
 use sha1::Sha1;
 use sha2::{Sha256, Sha512};
 use url::Url;
+use zeroize::Zeroize;
 
 use crate::models::{CreateAccountRequest, TotpAlgorithm};
 
@@ -109,19 +110,24 @@ impl TotpService {
             return Err("Süre 5 ile 300 saniye arasında olmalıdır.".to_string());
         }
 
-        let normalized = normalize_base32_secret(secret)?;
-        let secret_bytes = BASE32_NOPAD
+        let mut normalized = normalize_base32_secret(secret)?;
+        let decoded = BASE32_NOPAD
             .decode(normalized.as_bytes())
-            .map_err(|_| "Base32 anahtarı çözülemedi.".to_string())?;
+            .map_err(|_| "Base32 anahtarı çözülemedi.".to_string());
+        normalized.zeroize();
+        let mut secret_bytes = decoded?;
 
         let counter = (timestamp_ms / 1000) / u64::from(period);
-        let hash = compute_hmac(algorithm, &secret_bytes, &counter.to_be_bytes())?;
+        let hash_res = compute_hmac(algorithm, &secret_bytes, &counter.to_be_bytes());
+        secret_bytes.zeroize();
+        let mut hash = hash_res?;
 
         let offset = (hash[hash.len() - 1] & 0x0f) as usize;
         let bin_code = (u32::from(hash[offset] & 0x7f) << 24)
             | (u32::from(hash[offset + 1]) << 16)
             | (u32::from(hash[offset + 2]) << 8)
             | u32::from(hash[offset + 3]);
+        hash.zeroize();
 
         let modulo = 10u64.pow(digits);
         let otp = u64::from(bin_code) % modulo;
