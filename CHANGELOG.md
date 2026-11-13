@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.13
+## 1.0.0
 
 - Migrate the desktop application backend to Tauri v2 (Rust) and configure `ardakrt/Authly-Rust` releases and update checks.
 - Eliminate the startup black screen by deferring window reveal until the UI is painted and serving bundled local fonts offline.

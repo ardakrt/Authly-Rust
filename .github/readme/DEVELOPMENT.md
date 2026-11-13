@@ -108,7 +108,7 @@ resources/              Application and tray icon sources
 
 ## Refresh the README screenshots
 
-Install development dependencies and make Playwright and Chrome available. The capture script starts a local renderer-only Vite server with `@shared` and `@renderer` aliases, injects synthetic `window.authapp` responses (reporting version `0.3.12`), and saves PNGs in `.github/readme/images/`:
+Install development dependencies and make Playwright and Chrome available. The capture script starts a local renderer-only Vite server with `@shared` and `@renderer` aliases, injects synthetic `window.authapp` responses (reporting version `1.0.0`), and saves PNGs in `.github/readme/images/`:
 
 ```bash
 node .github/readme/capture.mjs

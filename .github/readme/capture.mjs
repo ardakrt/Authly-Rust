@@ -62,7 +62,7 @@ try {
         window.authapp = {
           getRuntimeInfo: async () => ({
             appName: 'Authly',
-            appVersion: '0.3.12',
+            appVersion: '1.0.0',
             platform: 'win32',
             packaged: false,
           }),
@@ -79,10 +79,10 @@ try {
           getLockStatus: async () => ({ isPinSet: true, isLocked: locked, autoLockTimeout: 5 }),
           checkUpdate: async () => ({
             hasUpdate: false,
-            currentVersion: '0.3.12',
-            latestVersion: '0.3.12',
+            currentVersion: '1.0.0',
+            latestVersion: '1.0.0',
           }),
-          getUpdateState: async () => ({ phase: 'idle', currentVersion: '0.3.12' }),
+          getUpdateState: async () => ({ phase: 'idle', currentVersion: '1.0.0' }),
           onUpdateState: () => () => {},
           copyTotp: async () => {},
           lockApp: async () => {},

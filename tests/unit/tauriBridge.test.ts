@@ -40,13 +40,13 @@ describe('Tauri window.authapp bridge', () => {
 
     invokeMock.mockResolvedValueOnce({
       appName: 'Authly',
-      appVersion: '0.3.13',
+      appVersion: '1.0.0',
       platform: 'win32',
       packaged: true,
     });
     await expect(api.getRuntimeInfo()).resolves.toMatchObject({
       appName: 'Authly',
-      appVersion: '0.3.13',
+      appVersion: '1.0.0',
     });
     expect(invokeMock).toHaveBeenLastCalledWith('get_runtime_info', { request: {} });
 
@@ -145,8 +145,8 @@ describe('Tauri window.authapp bridge', () => {
 
     invokeMock.mockResolvedValueOnce({
       hasUpdate: false,
-      currentVersion: '0.3.13',
-      latestVersion: '0.3.13',
+      currentVersion: '1.0.0',
+      latestVersion: '1.0.0',
     });
     await expect(api.checkUpdate()).resolves.toMatchObject({ hasUpdate: false });
   });
@@ -198,10 +198,10 @@ describe('Tauri window.authapp bridge', () => {
     const received: unknown[] = [];
     const stopUpdate = api.onUpdateState((state) => received.push(state));
     await Promise.resolve();
-    capturedHandler?.({ payload: { phase: 'idle', currentVersion: '0.3.13' } });
+    capturedHandler?.({ payload: { phase: 'idle', currentVersion: '1.0.0' } });
     expect(listenMock).toHaveBeenCalledWith(LOCK_STATUS_EVENT, expect.any(Function));
     expect(listenMock).toHaveBeenCalledWith(UPDATE_STATE_EVENT, expect.any(Function));
-    expect(received).toEqual([{ phase: 'idle', currentVersion: '0.3.13' }]);
+    expect(received).toEqual([{ phase: 'idle', currentVersion: '1.0.0' }]);
     stopUpdate();
   });
 
