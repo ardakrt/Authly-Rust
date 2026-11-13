@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.12
+
+- Fix account search dialog (`SearchDialog`) to load registered accounts and live TOTP codes instead of showing an empty-accounts message.
+- Filter and rank accounts across issuer and account name with Turkish and default locale case matching, keyboard navigation (`ArrowUp`/`ArrowDown`/`Enter`/`Escape`), one-click TOTP code copy, and jump-to-card highlighting.
+- Refresh TOTP codes on period rollover while the search dialog is open and reset search state when closed or locked.
+
 ## 0.3.11
 
 - Validate and normalize Base32 account keys before storage; isolate unreadable legacy accounts so healthy codes remain available.

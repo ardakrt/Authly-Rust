@@ -11,11 +11,12 @@ import {
   X,
 } from 'lucide-react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import type { AccountDto } from '@shared/schemas/account';
 import type { TotpCode } from '@shared/schemas/totp';
 import { PageHeading } from '../components/PageHeading';
 import { useLanguage } from '../hooks/useLanguage';
+import { formatTotpCode, hasTotpPeriodRolled } from '../utils/accountHelpers';
 
 const Countdown = memo(function Countdown({ period }: { period: number }): React.JSX.Element {
   const { t } = useLanguage();
@@ -63,6 +64,7 @@ export function HomePage(): React.JSX.Element {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [copiedAccountId, setCopiedAccountId] = useState<string | null>(null);
+  const [highlightedAccountId, setHighlightedAccountId] = useState<string | null>(null);
   const [activeMenuAccountId, setActiveMenuAccountId] = useState<string | null>(null);
   const [deletingAccount, setDeletingAccount] = useState<AccountDto | null>(null);
   const [deletingBusy, setDeletingBusy] = useState(false);
@@ -72,7 +74,9 @@ export function HomePage(): React.JSX.Element {
   const [editingBusy, setEditingBusy] = useState(false);
 
   const { t } = useLanguage();
+  const location = useLocation();
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const cardRefs = useRef<Map<string, HTMLElement>>(new Map());
 
   const refresh = useCallback(async () => {
     try {
@@ -117,10 +121,7 @@ export function HomePage(): React.JSX.Element {
       const currentSec = Math.floor(currentTime / 1000);
 
       if (currentSec !== lastSec) {
-        const periodRolled = accounts.some((account) => {
-          const period = account.period || 30;
-          return Math.floor(lastSec / period) !== Math.floor(currentSec / period);
-        });
+        const periodRolled = hasTotpPeriodRolled(accounts, lastSec, currentSec);
         if (periodRolled || (accounts.length > 0 && codes.length === 0)) {
           void window.authapp
             .getTotpCodes()
@@ -143,6 +144,29 @@ export function HomePage(): React.JSX.Element {
       window.clearInterval(codeRefreshTimer);
     };
   }, [accounts, codes.length]);
+
+  useEffect(() => {
+    const focusAccountId = (location.state as { focusAccountId?: string } | null)?.focusAccountId;
+    if (loading || !focusAccountId) return;
+    if (!accounts.some((account) => account.id === focusAccountId)) return;
+
+    let clearTimer = 0;
+    const applyTimer = window.setTimeout(() => {
+      setHighlightedAccountId(focusAccountId);
+      cardRefs.current.get(focusAccountId)?.scrollIntoView?.({
+        behavior: 'smooth',
+        block: 'center',
+      });
+      clearTimer = window.setTimeout(() => {
+        setHighlightedAccountId((prev) => (prev === focusAccountId ? null : prev));
+      }, 2200);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(applyTimer);
+      window.clearTimeout(clearTimer);
+    };
+  }, [accounts, loading, location.state]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -272,7 +296,15 @@ export function HomePage(): React.JSX.Element {
                 const isMenuOpen = activeMenuAccountId === account.id;
 
                 return (
-                  <article className="account-card liquid-glass-card" key={account.id}>
+                  <article
+                    className={`account-card liquid-glass-card ${highlightedAccountId === account.id ? 'is-highlighted' : ''}`}
+                    key={account.id}
+                    data-account-id={account.id}
+                    ref={(element) => {
+                      if (element) cardRefs.current.set(account.id, element);
+                      else cardRefs.current.delete(account.id);
+                    }}
+                  >
                     <div className="account-card__top">
                       <span className="service-avatar liquid-glass-pill">
                         {account.issuer.slice(0, 2).toUpperCase()}
@@ -315,7 +347,7 @@ export function HomePage(): React.JSX.Element {
 
                     <div className="otp-row">
                       <strong className="otp-code">
-                        {value ? value.code.replace(/(.{3})/g, '$1 ').trim() : t('codeUnavailable')}
+                        {value ? formatTotpCode(value.code) : t('codeUnavailable')}
                       </strong>
                       <button
                         className={`copy-button liquid-glass-pill ${isCopied ? 'is-copied' : ''}`}

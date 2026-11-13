@@ -104,7 +104,13 @@ export const translations = {
     // Search Dialog
     searchPlaceholder: 'Hesap veya komut ara',
     searchNoAccounts: 'Kayıtlı hesap yok. Kullanılabilir uygulama komutları:',
-    searchNoMatch: 'Bu aramayla eşleşen komut yok.',
+    searchNoMatch: 'Bu aramayla eşleşen hesap veya komut yok.',
+    searchAccountsSection: 'Hesaplar',
+    searchCommandsSection: 'Uygulama komutları',
+    searchLoading: 'Hesaplar yükleniyor…',
+    searchLoadError: 'Hesaplar okunamadı.',
+    searchCopyError: 'Kod panoya kopyalanamadı.',
+    searchShowAccount: 'Hesaba git',
     cmdAddAccount: 'Yeni hesap ekle',
     cmdOpenSettings: 'Ayarları aç',
 
@@ -222,7 +228,13 @@ export const translations = {
     // Search Dialog
     searchPlaceholder: 'Search accounts or commands',
     searchNoAccounts: 'No registered accounts. Available app commands:',
-    searchNoMatch: 'No commands matching this search.',
+    searchNoMatch: 'No accounts or commands matching this search.',
+    searchAccountsSection: 'Accounts',
+    searchCommandsSection: 'App commands',
+    searchLoading: 'Loading accounts…',
+    searchLoadError: 'Could not load accounts.',
+    searchCopyError: 'Failed to copy code.',
+    searchShowAccount: 'Go to account',
     cmdAddAccount: 'Add new account',
     cmdOpenSettings: 'Open settings',
 

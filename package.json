@@ -1,6 +1,6 @@
 {
   "name": "authapp",
-  "version": "0.3.11",
+  "version": "0.3.12",
   "private": true,
   "description": "Cross-platform, offline desktop authenticator for Windows and Linux",
   "desktopName": "Authly",

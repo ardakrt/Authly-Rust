@@ -17,7 +17,9 @@ export function App(): React.JSX.Element {
     setUnlocked(!status.isLocked);
     if (status.isLocked) setSearchOpen(false);
   }, []);
-  const openSearch = useCallback(() => setSearchOpen(true), []);
+  const openSearch = useCallback(() => {
+    if (unlocked) setSearchOpen(true);
+  }, [unlocked]);
   const closeSearch = useCallback(() => setSearchOpen(false), []);
   useKeyboardShortcuts(openSearch);
 
