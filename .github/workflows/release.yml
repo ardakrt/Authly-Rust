@@ -27,39 +27,51 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Use stable Rust toolchain
+        run: rustup default stable
+
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-release-
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libdbus-1-dev pkg-config
+
       - name: Install dependencies
         run: npm ci
 
-      - name: Verify project on Windows
-        if: runner.os == 'Windows'
+      - name: Verify project
         run: npm run verify
 
-      - name: Verify project on Linux
-        if: runner.os == 'Linux'
-        env:
-          ELECTRON_DISABLE_SANDBOX: '1'
-        run: xvfb-run --auto-servernum npm run verify
+      - name: Run smoke check
+        run: npm run smoke
 
       - name: Build Windows installer
         if: runner.os == 'Windows'
-        run: npx electron-builder --win nsis --x64 --publish never
+        run: npm run tauri:build
 
       - name: Build Linux packages
         if: runner.os == 'Linux'
-        run: npx electron-builder --linux AppImage deb --x64 --publish never
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+        run: npx tauri build --bundles deb,appimage
 
       - name: Upload packaged artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: authly-${{ matrix.platform }}
           path: |
-            dist/*.exe
-            dist/*.exe.blockmap
-            dist/*.AppImage
-            dist/*.AppImage.blockmap
-            dist/*.deb
-            dist/latest.yml
-            dist/latest-linux.yml
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/appimage/*.AppImage
           if-no-files-found: error
 
   publish:
@@ -73,6 +85,12 @@ jobs:
           pattern: authly-*
           path: dist
           merge-multiple: true
+
+      - name: Flatten downloaded artifacts
+        working-directory: dist
+        run: |
+          find . -mindepth 2 -type f -exec mv -t . {} +
+          find . -mindepth 1 -type d -empty -delete
 
       - name: Generate SHA-256 checksums
         working-directory: dist

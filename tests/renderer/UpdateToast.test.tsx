@@ -18,7 +18,7 @@ describe('UpdateToast', () => {
       hasUpdate: true,
       currentVersion: '0.3.5',
       latestVersion: '0.3.6',
-      releaseUrl: 'https://github.com/ardakrt/authly/releases/tag/v0.3.6',
+      releaseUrl: 'https://github.com/ardakrt/Authly-Rust/releases/tag/v0.3.6',
     });
 
     renderToast();
@@ -36,7 +36,7 @@ describe('UpdateToast', () => {
       hasUpdate: true,
       currentVersion: '0.3.5',
       latestVersion: '0.3.6',
-      releaseUrl: 'https://github.com/ardakrt/authly/releases/tag/v0.3.6',
+      releaseUrl: 'https://github.com/ardakrt/Authly-Rust/releases/tag/v0.3.6',
     });
 
     const user = userEvent.setup();
@@ -58,7 +58,7 @@ describe('UpdateToast', () => {
       hasUpdate: true,
       currentVersion: '0.3.5',
       latestVersion: '0.3.6',
-      releaseUrl: 'https://github.com/ardakrt/authly/releases/tag/v0.3.6',
+      releaseUrl: 'https://github.com/ardakrt/Authly-Rust/releases/tag/v0.3.6',
     });
 
     const user = userEvent.setup();

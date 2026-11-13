@@ -16,7 +16,12 @@ const server = await createServer({
   configFile: false,
   root: path.join(root, 'src/renderer'),
   plugins: [react()],
-  resolve: { alias: { '@shared': path.join(root, 'src/shared') } },
+  resolve: {
+    alias: {
+      '@shared': path.join(root, 'src/shared'),
+      '@renderer': path.join(root, 'src/renderer/src'),
+    },
+  },
   server: { host: '127.0.0.1', port: 0 },
 });
 await server.listen();
@@ -57,7 +62,7 @@ try {
         window.authapp = {
           getRuntimeInfo: async () => ({
             appName: 'Authly',
-            appVersion: '0.3.9',
+            appVersion: '0.3.12',
             platform: 'win32',
             packaged: false,
           }),
@@ -74,10 +79,10 @@ try {
           getLockStatus: async () => ({ isPinSet: true, isLocked: locked, autoLockTimeout: 5 }),
           checkUpdate: async () => ({
             hasUpdate: false,
-            currentVersion: '0.3.9',
-            latestVersion: '0.3.9',
+            currentVersion: '0.3.12',
+            latestVersion: '0.3.12',
           }),
-          getUpdateState: async () => ({ phase: 'idle', currentVersion: '0.3.9' }),
+          getUpdateState: async () => ({ phase: 'idle', currentVersion: '0.3.12' }),
           onUpdateState: () => () => {},
           copyTotp: async () => {},
           lockApp: async () => {},

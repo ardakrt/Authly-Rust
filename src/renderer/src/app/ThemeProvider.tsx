@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ThemeContext, type ThemePreference } from './themeContext';
 
 const STORAGE_KEY = 'authapp.theme';
@@ -15,6 +15,7 @@ function getResolvedTheme(preference: ThemePreference): 'light' | 'dark' {
 
 export function ThemeProvider({ children }: { children: ReactNode }): React.JSX.Element {
   const [preference, setPreferenceState] = useState<ThemePreference>(readPreference);
+  const userModifiedRef = useRef(false);
 
   const applyTheme = useCallback((nextPreference: ThemePreference) => {
     document.documentElement.dataset['theme'] = getResolvedTheme(nextPreference);
@@ -22,12 +23,33 @@ export function ThemeProvider({ children }: { children: ReactNode }): React.JSX.
 
   const setPreference = useCallback(
     (nextPreference: ThemePreference) => {
+      userModifiedRef.current = true;
       window.localStorage.setItem(STORAGE_KEY, nextPreference);
       setPreferenceState(nextPreference);
       applyTheme(nextPreference);
+      void window.authapp?.updateSettings?.({ theme: nextPreference })?.catch(() => {});
     },
     [applyTheme],
   );
+
+  useEffect(() => {
+    if (window.localStorage.getItem(STORAGE_KEY) !== null) return;
+    let cancelled = false;
+    void window.authapp
+      ?.getSettings?.()
+      ?.then((s) => {
+        if (cancelled || userModifiedRef.current) return;
+        if (s?.theme === 'light' || s?.theme === 'dark' || s?.theme === 'system') {
+          window.localStorage.setItem(STORAGE_KEY, s.theme);
+          setPreferenceState(s.theme);
+          applyTheme(s.theme);
+        }
+      })
+      ?.catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [applyTheme]);
 
   useEffect(() => {
     applyTheme(preference);

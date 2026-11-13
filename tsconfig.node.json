@@ -2,14 +2,14 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "composite": true,
-    "types": ["node", "electron-vite/node"]
+    "lib": ["ES2022", "DOM"],
+    "types": ["node", "vitest/globals"]
   },
   "include": [
-    "electron.vite.config.ts",
+    "vite.config.ts",
     "vitest.config.ts",
-    "src/main/**/*.ts",
-    "src/preload/**/*.ts",
     "src/shared/**/*.ts",
+    "src/renderer/src/bridge/tauriBridge.ts",
     "tests/unit/**/*.ts"
   ]
 }

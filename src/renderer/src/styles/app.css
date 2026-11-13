@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
-
 * {
   box-sizing: border-box;
 }
@@ -16,7 +14,7 @@ body,
 body {
   background: var(--color-paper);
   color: var(--color-ink);
-  font-family: 'Outfit', 'Plus Jakarta Sans', var(--font-body), sans-serif;
+  font-family: var(--font-body);
   font-size: var(--text-base);
   line-height: 1.55;
   text-rendering: optimizeLegibility;

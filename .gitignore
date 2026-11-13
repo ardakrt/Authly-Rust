@@ -1,6 +1,9 @@
 node_modules/
 out/
 dist/
+dist-renderer/
+src-tauri/target/
+src-tauri/gen/
 coverage/
 *.tsbuildinfo
 *.log
@@ -18,6 +21,8 @@ temp_icon_pack/
 *.db-journal
 *.db-wal
 *.db-shm
+*.authapp
+*.bak
 
 .codex/
 .continue/

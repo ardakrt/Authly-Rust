@@ -21,17 +21,28 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Use stable Rust toolchain
+        run: rustup default stable
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libdbus-1-dev pkg-config
       - run: npm ci
       - name: Audit dependency vulnerabilities
         run: npm audit --audit-level=high
-      - name: Verify on Windows
-        if: runner.os == 'Windows'
+      - name: Verify project
         run: npm run verify
-      - name: Verify on Linux
-        if: runner.os == 'Linux'
-        env:
-          ELECTRON_DISABLE_SANDBOX: '1'
-        run: xvfb-run --auto-servernum npm run verify
+      - name: Run smoke check
+        run: npm run smoke
 
   verify:
     needs: verify-platform

@@ -57,30 +57,29 @@ export function AddAccountPage(): React.JSX.Element {
   const [scannedPreview, setScannedPreview] = useState<boolean>(false);
 
   // Handle scanned QR string
-  const handleDecodedContent = useCallback(async (content: string) => {
-    try {
-      const parsedList = await processScannedQrContent(content);
+  const handleDecodedContent = useCallback(
+    async (content: string) => {
+      try {
+        const parsedList = await processScannedQrContent(content);
 
-      if (parsedList.length === 1 && parsedList[0]) {
-        setForm(parsedList[0]);
-        setBatchAccounts([]);
-        setScannedPreview(true);
-        setError('');
-        setSuccessMsg(
-          'QR kod başarıyla algılandı! Hesap detaylarını aşağıdan kontrol edip kaydet.',
-        );
-      } else if (parsedList.length > 1) {
-        setBatchAccounts(parsedList.map((account) => ({ account, selected: true })));
-        setScannedPreview(true);
-        setError('');
-        setSuccessMsg(
-          `Google Authenticator dışa aktarım QR kodunda ${parsedList.length} adet hesap bulundu! İçer aktarmak istediklerini seçip kaydedebilirsin.`,
-        );
+        if (parsedList.length === 1 && parsedList[0]) {
+          setForm(parsedList[0]);
+          setBatchAccounts([]);
+          setScannedPreview(true);
+          setError('');
+          setSuccessMsg(t('qrDetectedSingle'));
+        } else if (parsedList.length > 1) {
+          setBatchAccounts(parsedList.map((account) => ({ account, selected: true })));
+          setScannedPreview(true);
+          setError('');
+          setSuccessMsg(t('qrDetectedBatch').replace('{count}', String(parsedList.length)));
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : t('qrReadError'));
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'QR kod okunamadı.');
-    }
-  }, []);
+    },
+    [t],
+  );
 
   // Handle clipboard paste (Ctrl+V or clipboard image/text)
   const handlePaste = useCallback(
@@ -124,12 +123,12 @@ export function AddAccountPage(): React.JSX.Element {
           return;
         }
 
-        setError('Panoda QR kod görseli veya kurulum anahtarı bulunamadı.');
+        setError(t('clipboardEmptyError'));
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Panodan QR okunamadı.');
+        setError(err instanceof Error ? err.message : t('clipboardReadError'));
       }
     },
-    [handleDecodedContent],
+    [handleDecodedContent, t],
   );
 
   // Global paste event listener when upload mode is active
@@ -153,7 +152,7 @@ export function AddAccountPage(): React.JSX.Element {
       const content = await decodeQrFromImageFile(file);
       await handleDecodedContent(content);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Dosya okunamadı.');
+      setError(err instanceof Error ? err.message : t('fileReadError'));
     }
   };
 
@@ -161,11 +160,11 @@ export function AddAccountPage(): React.JSX.Element {
   async function submitSingleForm(event: FormEvent): Promise<void> {
     event.preventDefault();
     if (!form.issuer.trim()) {
-      setError('Lütfen bir servis adı girin.');
+      setError(t('serviceRequiredError'));
       return;
     }
     if (!form.accountName.trim()) {
-      setError('Lütfen bir hesap adı girin.');
+      setError(t('accountNameRequiredError'));
       return;
     }
     const parsed = createAccountRequestSchema.safeParse(form);
@@ -180,7 +179,7 @@ export function AddAccountPage(): React.JSX.Element {
       await window.authapp.createAccount(parsed.data);
       navigate('/');
     } catch {
-      setError('Hesap kaydedilemedi. Kurulum anahtarını kontrol edin.');
+      setError(t('accountSaveError'));
       setSaving(false);
     }
   }
@@ -189,7 +188,7 @@ export function AddAccountPage(): React.JSX.Element {
   async function submitBatch(): Promise<void> {
     const selectedList = batchAccounts.filter((item) => item.selected).map((item) => item.account);
     if (selectedList.length === 0) {
-      setError('Lütfen içe aktarılacak en az bir hesap seçin.');
+      setError(t('selectAtLeastOneAccountError'));
       return;
     }
 
@@ -228,7 +227,7 @@ export function AddAccountPage(): React.JSX.Element {
         }
       />
 
-      <div className="add-mode-tabs" role="tablist" aria-label="Hesap ekleme yöntemi">
+      <div className="add-mode-tabs" role="tablist" aria-label={t('addMethodAriaLabel')}>
         <button
           type="button"
           role="tab"
@@ -310,11 +309,9 @@ export function AddAccountPage(): React.JSX.Element {
           <div className="form-card-header">
             <h3>
               <Layers size={20} style={{ display: 'inline', marginRight: '0.5rem' }} />
-              Çoklu Hesap İçe Aktarma ({batchAccounts.length} Hesap)
+              {t('batchImportTitle').replace('{count}', String(batchAccounts.length))}
             </h3>
-            <p>
-              QR kodundan çıkarılan hesaplar aşağıda listelenmiştir. İstediğinizi seçebilirsiniz.
-            </p>
+            <p>{t('batchImportDesc')}</p>
           </div>
 
           <div className="batch-actions-header">
@@ -323,10 +320,12 @@ export function AddAccountPage(): React.JSX.Element {
               className="chip-btn"
               onClick={() => toggleBatchSelectAll(selectedBatchCount < batchAccounts.length)}
             >
-              {selectedBatchCount < batchAccounts.length ? 'Tümünü Seç' : 'Seçimleri Kaldır'}
+              {selectedBatchCount < batchAccounts.length ? t('selectAll') : t('deselectAll')}
             </button>
             <span className="chips-label">
-              {selectedBatchCount} / {batchAccounts.length} hesap seçildi
+              {t('batchSelectedCount')
+                .replace('{selected}', String(selectedBatchCount))
+                .replace('{total}', String(batchAccounts.length))}
             </span>
           </div>
 
@@ -369,7 +368,11 @@ export function AddAccountPage(): React.JSX.Element {
               onClick={() => void submitBatch()}
             >
               <Save size={18} />
-              <span>{saving ? t('saving') : `Seçili ${selectedBatchCount} Hesabı Kaydet`}</span>
+              <span>
+                {saving
+                  ? t('saving')
+                  : t('saveSelectedAccounts').replace('{count}', String(selectedBatchCount))}
+              </span>
             </button>
           </div>
         </div>
@@ -378,8 +381,8 @@ export function AddAccountPage(): React.JSX.Element {
       {(mode === 'manual' || (scannedPreview && batchAccounts.length <= 1)) && (
         <form className="account-form-card" onSubmit={(e) => void submitSingleForm(e)}>
           <div className="form-card-header">
-            <h3>{scannedPreview ? 'Algılanan Hesap Bilgileri' : 'Hesap Bilgileri'}</h3>
-            <p>Servis adını ve kullanıcı bilgilerinizi onaylayıp kaydedin.</p>
+            <h3>{scannedPreview ? t('detectedAccountDetails') : t('accountDetails')}</h3>
+            <p>{t('confirmAccountDetails')}</p>
           </div>
 
           {mode === 'manual' && (
@@ -406,7 +409,7 @@ export function AddAccountPage(): React.JSX.Element {
               <input
                 required
                 maxLength={120}
-                placeholder="Örn: Google, GitHub, Microsoft"
+                placeholder={t('servicePlaceholder')}
                 value={form.issuer}
                 onChange={(e) => setForm({ ...form, issuer: e.target.value })}
               />
@@ -417,7 +420,7 @@ export function AddAccountPage(): React.JSX.Element {
               <input
                 required
                 maxLength={240}
-                placeholder="Örn: kullanici@gmail.com"
+                placeholder={t('accountNamePlaceholder')}
                 value={form.accountName}
                 onChange={(e) => setForm({ ...form, accountName: e.target.value })}
               />
@@ -429,7 +432,7 @@ export function AddAccountPage(): React.JSX.Element {
                 required
                 autoComplete="off"
                 spellCheck={false}
-                placeholder="Örn: JBSWY3DPEHPK3PXP"
+                placeholder={t('secretKeyPlaceholder')}
                 value={form.secret}
                 onChange={(e) => setForm({ ...form, secret: e.target.value.replace(/\s+/g, '') })}
               />
@@ -500,7 +503,7 @@ export function AddAccountPage(): React.JSX.Element {
                   setForm(defaultForm);
                 }}
               >
-                <RefreshCw size={16} /> Yeniden Yükle
+                <RefreshCw size={16} /> {t('uploadAgain')}
               </button>
             )}
 

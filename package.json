@@ -7,40 +7,38 @@
   "author": "Arda Kartal <ardakartaskisisel@gmail.com>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ardakrt/authly.git"
+    "url": "git+https://github.com/ardakrt/Authly-Rust.git"
   },
-  "main": "out/main/index.cjs",
+  "overrides": {
+    "minimatch": "^11.0.8"
+  },
   "type": "module",
   "scripts": {
-    "postinstall": "install-electron && electron-builder install-app-deps",
-    "predev": "electron-builder install-app-deps",
-    "dev": "electron-vite dev",
-    "start": "electron-vite preview",
+    "dev": "tauri dev",
+    "dev:web": "vite",
+    "start": "vite preview",
+    "tauri": "tauri",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "pretest": "npm rebuild better-sqlite3",
-    "test": "vitest run",
+    "test": "npm run test:web && npm run test:rust",
+    "test:web": "vitest run",
     "test:watch": "vitest",
-    "build": "npm run typecheck && electron-vite build",
-    "presmoke": "electron-builder install-app-deps",
+    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "build": "npm run typecheck && npm run build:web",
+    "build:web": "vite build",
+    "tauri:build": "tauri build",
     "smoke": "node scripts/smoke.mjs",
-    "smoke:visual": "node scripts/smoke.mjs --visual",
-    "verify": "npm run format:check && npm run lint && npm run test && npm run build && npm run smoke",
-    "package:win": "npm run verify && electron-builder --win nsis --x64",
-    "package:linux": "npm run verify && electron-builder --linux AppImage deb --x64",
-    "package:linux:fast": "npm run build && electron-builder --linux AppImage deb --x64"
+    "verify": "npm run format:check && npm run lint && npm run typecheck && npm run test:web && npm run test:rust && npm run build:web"
   },
   "dependencies": {
     "@fontsource/ibm-plex-sans": "5.3.0",
     "@fontsource/jetbrains-mono": "5.3.0",
     "@fontsource/space-grotesk": "5.3.0",
-    "better-sqlite3": "^13.0.3",
-    "electron-updater": "^6.8.11",
+    "@tauri-apps/api": "^2.5.0",
     "jsqr": "^1.4.0",
     "lucide-react": "1.30.0",
-    "otpauth": "^9.5.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-router-dom": "7.18.2",
@@ -48,17 +46,14 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@tauri-apps/cli": "^2.5.0",
     "@testing-library/jest-dom": "7.0.0",
     "@testing-library/react": "16.3.2",
     "@testing-library/user-event": "14.6.3",
-    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "26.2.0",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "@vitejs/plugin-react": "5.1.4",
-    "electron": "43.8.4",
-    "electron-builder": "26.15.3",
-    "electron-vite": "5.0.0",
     "eslint": "10.8.1",
     "eslint-plugin-react-hooks": "7.1.1",
     "eslint-plugin-react-refresh": "0.5.3",
@@ -73,70 +68,5 @@
   "packageManager": "npm@11.13.0",
   "engines": {
     "node": ">=20.19.0"
-  },
-  "build": {
-    "appId": "dev.authapp.desktop",
-    "productName": "Authly",
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "ardakrt",
-        "repo": "authly"
-      }
-    ],
-    "asar": true,
-    "electronUpdaterCompatibility": ">=2.16",
-    "directories": {
-      "buildResources": "resources",
-      "output": "dist"
-    },
-    "files": [
-      "out/**/*",
-      "resources/**/*",
-      "package.json"
-    ],
-    "win": {
-      "icon": "resources/icon.ico",
-      "artifactName": "Authly-Setup-${version}.${ext}",
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        }
-      ]
-    },
-    "linux": {
-      "icon": "resources/icon.png",
-      "category": "Utility;Security",
-      "executableName": "authly",
-      "syncDesktopName": true,
-      "artifactName": "Authly-${version}-${arch}.${ext}",
-      "target": [
-        {
-          "target": "AppImage",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
-          "target": "deb",
-          "arch": [
-            "x64"
-          ]
-        }
-      ]
-    },
-    "deb": {
-      "packageCategory": "utils",
-      "priority": "optional"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
-    }
   }
 }

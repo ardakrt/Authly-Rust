@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core';
 import {
   AlertTriangle,
   Check,
@@ -17,6 +18,19 @@ import type { TotpCode } from '@shared/schemas/totp';
 import { PageHeading } from '../components/PageHeading';
 import { useLanguage } from '../hooks/useLanguage';
 import { formatTotpCode, hasTotpPeriodRolled } from '../utils/accountHelpers';
+
+function notifyAppReady(): void {
+  if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) {
+    return;
+  }
+  window.setTimeout(() => {
+    try {
+      void Promise.resolve(invoke('notify_app_ready')).catch(() => {});
+    } catch {
+      // Ignore when invoke is unavailable outside Tauri runtime.
+    }
+  }, 16);
+}
 
 const Countdown = memo(function Countdown({ period }: { period: number }): React.JSX.Element {
   const { t } = useLanguage();
@@ -98,6 +112,7 @@ export function HomePage(): React.JSX.Element {
       setCodes([]);
     } finally {
       setLoading(false);
+      notifyAppReady();
     }
   }, []);
 
@@ -265,7 +280,7 @@ export function HomePage(): React.JSX.Element {
 
         {error ? (
           <div className="error-banner" role="alert">
-            Kodlar okunamadı.
+            {t('codesLoadError')}
           </div>
         ) : null}
 

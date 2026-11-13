@@ -1,7 +1,21 @@
-﻿import { Delete, KeyRound, Lock, ShieldAlert, Unlock } from 'lucide-react';
+﻿import { invoke } from '@tauri-apps/api/core';
+import { Delete, KeyRound, Lock, ShieldAlert, Unlock } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import type { LockStatus } from '@shared/schemas/lock';
 import { useLanguage } from '../hooks/useLanguage';
+
+function notifyAppReady(): void {
+  if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) {
+    return;
+  }
+  window.setTimeout(() => {
+    try {
+      void Promise.resolve(invoke('notify_app_ready')).catch(() => {});
+    } catch {
+      // Ignore when invoke is unavailable outside Tauri runtime.
+    }
+  }, 16);
+}
 
 export function LockScreenOverlay({
   onUnlock,
@@ -21,8 +35,12 @@ export function LockScreenOverlay({
       const next = await window.authapp.getLockStatus();
       setStatus(next);
       onStatusChange?.(next);
+      if (next.isLocked) {
+        notifyAppReady();
+      }
     } catch {
       setError(t('lockStatusUnavailable'));
+      notifyAppReady();
     }
   }, [onStatusChange, t]);
 
@@ -34,6 +52,9 @@ export function LockScreenOverlay({
       if (isMounted) {
         setStatus(next);
         onStatusChange?.(next);
+        if (next.isLocked) {
+          notifyAppReady();
+        }
       }
     });
     void window.authapp
@@ -42,10 +63,16 @@ export function LockScreenOverlay({
         if (isMounted && !receivedEvent) {
           setStatus(next);
           onStatusChange?.(next);
+          if (next.isLocked) {
+            notifyAppReady();
+          }
         }
       })
       .catch(() => {
-        if (isMounted) setError(t('lockStatusUnavailable'));
+        if (isMounted) {
+          setError(t('lockStatusUnavailable'));
+          notifyAppReady();
+        }
       });
     return () => {
       isMounted = false;
@@ -56,7 +83,7 @@ export function LockScreenOverlay({
   const handleVerify = useCallback(
     async (pinToTest: string) => {
       if (pinToTest.length < 4) {
-        setError('PIN en az 4 haneli olmalıdır.');
+        setError(t('pinTooShort'));
         return;
       }
       setVerifying(true);
@@ -67,13 +94,13 @@ export function LockScreenOverlay({
         await checkStatus();
         if (onUnlock) onUnlock();
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'PIN hatalı.');
+        setError(err instanceof Error ? err.message : t('pinInvalidError'));
         setPin('');
       } finally {
         setVerifying(false);
       }
     },
-    [checkStatus, onUnlock],
+    [checkStatus, onUnlock, t],
   );
 
   const addDigit = useCallback(
@@ -110,7 +137,11 @@ export function LockScreenOverlay({
 
   if (!status)
     return (
-      <div className="lock-overlay" role="status">
+      <div
+        className="lock-overlay"
+        role="status"
+        style={error ? undefined : { opacity: 0, pointerEvents: 'none' }}
+      >
         <div className="lock-card">
           <p>{error || t('lockStatusLoading')}</p>
           {error && (
