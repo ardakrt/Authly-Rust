@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.13
+
+- Migrate the desktop application backend to Tauri v2 (Rust) and configure `ardakrt/Authly-Rust` releases and update checks.
+- Eliminate the startup black screen by deferring window reveal until the UI is painted and serving bundled local fonts offline.
+- Harden security: remove `localStorage` fallback storage, replace shell spawning in smoke tests, enforce strict CSP and trusted GitHub release URL checks, zeroize sensitive Rust secret/PIN buffers, and clear the cached vault master key on lock.
+
 ## 0.3.12
 
 - Fix account search dialog (`SearchDialog`) to load registered accounts and live TOTP codes instead of showing an empty-accounts message.

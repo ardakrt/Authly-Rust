@@ -55,7 +55,7 @@ import {
 } from '@shared/schemas/update';
 import type { AuthappApi } from '@shared/types/electron-api';
 
-const PREVIEW_VERSION = '0.3.12';
+const PREVIEW_VERSION = '0.3.13';
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
 type TotpAlgorithm = 'SHA1' | 'SHA256' | 'SHA512';
